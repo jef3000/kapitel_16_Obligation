@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kapitel 16 – Obligation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f4f3f8;
+    font-family: 'DM Sans', sans-serif;
+    color: #1a1730;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: grab;
+    user-select: none;
+  }
+  body.dragging { cursor: grabbing; }
+
+  #canvas-wrap {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+
+  svg#lines {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .node {
+    position: absolute;
+    cursor: pointer;
+    transition: filter 0.2s;
+  }
+  .node:hover { filter: brightness(0.92); }
+
+  .node-inner {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+
+  .node.root .node-inner {
+    background: #7c3aed;
+    border-color: #6d28d9;
+    color: #fff;
+    font-size: 15px;
+    font-family: 'DM Serif Display', serif;
+    font-weight: 400;
+    padding: 10px 24px;
+    border-radius: 30px;
+    box-shadow: 0 2px 20px #7c3aed44;
+    letter-spacing: 0.03em;
+  }
+
+  .node.l1 .node-inner {
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 5px 13px;
+    border-radius: 5px;
+  }
+
+  .node.l2 .node-inner {
+    font-size: 10.5px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: #fff;
+    border: 1px solid #ddd8ee;
+    color: #444;
+  }
+  .node.l2:hover .node-inner { color: #111; border-color: #bbb; background: #f8f7ff; }
+
+  .node.l3 .node-inner {
+    font-size: 10px;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: #faf9ff;
+    border: 1px solid #e4e0f0;
+    color: #555;
+  }
+  .node.l3:hover .node-inner { color: #222; border-color: #bbb; background: #f0eeff; }
+
+  /* Branch color themes */
+  .branch-0 { --bc: #7c3aed; }
+  .branch-1 { --bc: #2563eb; }
+  .branch-2 { --bc: #059669; }
+  .branch-3 { --bc: #db2777; }
+
+  .node.l1.branch-0 .node-inner { background: #ede9fe; border-color: #a78bfa; color: #4c1d95; }
+  .node.l1.branch-1 .node-inner { background: #dbeafe; border-color: #60a5fa; color: #1e3a8a; }
+  .node.l1.branch-2 .node-inner { background: #d1fae5; border-color: #34d399; color: #064e3b; }
+  .node.l1.branch-3 .node-inner { background: #fce7f3; border-color: #f472b6; color: #831843; }
+
+  .node.l2.branch-0 .node-inner { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
+  .node.l2.branch-1 .node-inner { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .node.l2.branch-2 .node-inner { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+  .node.l2.branch-3 .node-inner { background: #fdf2f8; border-color: #f9a8d4; color: #9d174d; }
+
+  .node.l3.branch-0 .node-inner { background: #faf8ff; border-color: #ddd6fe; color: #6d28d9; }
+  .node.l3.branch-1 .node-inner { background: #f8fbff; border-color: #bfdbfe; color: #1e40af; }
+  .node.l3.branch-2 .node-inner { background: #f6fefa; border-color: #a7f3d0; color: #047857; }
+  .node.l3.branch-3 .node-inner { background: #fff8fc; border-color: #fbcfe8; color: #be185d; }
+
+  /* Info Panel */
+  #info-panel {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #ffffff;
+    border: 1px solid #e2ddf0;
+    border-radius: 14px;
+    padding: 14px 20px 14px 18px;
+    font-size: 12.5px;
+    color: #1a1730;
+    max-width: 480px;
+    min-width: 280px;
+    line-height: 1.6;
+    z-index: 200;
+    box-shadow: 0 8px 40px #0000001a;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  #info-panel.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+  }
+  #info-panel .info-accent {
+    width: 3px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    align-self: stretch;
+    min-height: 20px;
+  }
+  #info-panel .info-body { flex: 1; }
+  #info-panel .info-title {
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 4px;
+    opacity: 0.7;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #info-panel .info-text {
+    font-size: 13px;
+    color: #333;
+    line-height: 1.55;
+  }
+  #info-panel .info-question {
+    margin-top: 7px;
+    font-size: 11.5px;
+    color: #777;
+    font-style: italic;
+  }
+  #info-panel .close-btn {
+    font-size: 16px;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 0 0 4px;
+    flex-shrink: 0;
+    transition: color 0.15s;
+    background: none;
+    border: none;
+  }
+  #info-panel .close-btn:hover { color: #555; }
+
+  /* Controls */
+  #controls {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 50;
+  }
+  #controls button {
+    width: 36px; height: 36px;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    color: #555;
+    border-radius: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+    box-shadow: 0 1px 4px #0000000f;
+  }
+  #controls button:hover { background: #f0eeff; color: #333; border-color: #bbb; }
+
+  #legend {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    font-size: 11px;
+    color: #888;
+    z-index: 50;
+  }
+  #legend h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 14px;
+    color: #7c3aed;
+    margin-bottom: 8px;
+    font-weight: 400;
+  }
+  .leg { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap">
+  <svg id="lines"></svg>
+  <div id="nodes"></div>
+</div>
+
+<div id="info-panel">
+  <div class="info-accent" id="info-accent"></div>
+  <div class="info-body">
+    <div class="info-title" id="info-title"></div>
+    <div class="info-text" id="info-text"></div>
+    <div class="info-question" id="info-question"></div>
+  </div>
+  <button class="close-btn" id="info-close">✕</button>
+</div>
+
+<div id="controls">
+  <button id="zoomIn" title="Zoom in">+</button>
+  <button id="zoomOut" title="Zoom out">−</button>
+  <button id="zoomReset" title="Reset" style="font-size:13px;">⌖</button>
+</div>
+
+<div id="legend">
+  <h3>Kapitel 16 – Obligation</h3>
+  <div class="leg"><div class="leg-dot" style="background:#7c3aed"></div> Begriff &amp; Grundlagen</div>
+  <div class="leg"><div class="leg-dot" style="background:#db2777"></div> Entstehung der Obligation</div>
+  <div class="leg"><div class="leg-dot" style="background:#2563eb"></div> Von Gesetzes wegen</div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const data = {
+  id: 'root', label: 'Obligation (Kap. 16)', level: 'root',
+  children: [
+
+    // BRANCH 0 — Begriff & Grundlagen (LEFT TOP)
+    { id: 'ob', label: 'Begriff & Grundlagen', sub: 'Kap. 16.1', branch: 0, level: 'l1',
+      children: [
+        { id: 'ob_def', label: 'Definition', branch: 0, level: 'l2', children: [
+          { id: 'ob_def1', label: 'Rechtsverhältnis zwischen ≥2 Personen', branch: 0, level: 'l3' },
+          { id: 'ob_def2', label: 'Eine Partei hat Recht auf Leistung', branch: 0, level: 'l3' },
+          { id: 'ob_def3', label: 'Andere Partei ist zur Leistung verpflichtet', branch: 0, level: 'l3' },
+        ]},
+        { id: 'ob_par', label: 'Parteien', branch: 0, level: 'l2', children: [
+          { id: 'ob_gl', label: 'Gläubiger', branch: 0, level: 'l3', children: [
+            { id: 'ob_gl1', label: 'Hat Recht auf Leistung = Forderung', branch: 0, level: 'l3' },
+          ]},
+          { id: 'ob_sc', label: 'Schuldner', branch: 0, level: 'l3', children: [
+            { id: 'ob_sc1', label: 'Ist zur Leistung verpflichtet = Schuld', branch: 0, level: 'l3' },
+          ]},
+        ]},
+        { id: 'ob_sv', label: 'Schuldverhältnis', branch: 0, level: 'l2', children: [
+          { id: 'ob_sv1', label: 'Gesamtheit aller Rechtsbeziehungen zwischen Parteien', branch: 0, level: 'l3' },
+          { id: 'ob_sv2', label: 'Kann mehrere Obligationen umfassen', branch: 0, level: 'l3' },
+          { id: 'ob_sv3', label: 'Bsp. Kaufvertrag: Kaufpreisobligation + Warenobligation', branch: 0, level: 'l3' },
+        ]},
+      ]
+    },
+
+    // BRANCH 3 — Entstehung der Obligation (RIGHT, new L1 parent)
+    { id: 'entst', label: 'Entstehung der Obligation', branch: 3, level: 'l1',
+      children: [
+
+    // mit dem Willen der Parteien (now L2)
+    { id: 'vert', label: 'mit dem Willen der Parteien', branch: 3, level: 'l2',
+      children: [
+        { id: 'vert_prinz', label: 'Vertragsfreiheit', branch: 3, level: 'l3', children: [
+          { id: 'vert_p1', label: 'Parteien verpflichten sich freiwillig', branch: 3, level: 'l3' },
+          { id: 'vert_p2', label: 'Antrag + Annahme = Vertrag', branch: 3, level: 'l3' },
+          { id: 'vert_p3', label: 'Häufigste Entstehungsquelle', branch: 3, level: 'l3' },
+        ]},
+        { id: 'vert_arten', label: 'Vertragstypen (Auswahl)', branch: 3, level: 'l3', children: [
+          { id: 'vert_kv', label: 'Kaufvertrag', branch: 3, level: 'l3' },
+          { id: 'vert_mv', label: 'Mietvertrag', branch: 3, level: 'l3' },
+          { id: 'vert_av', label: 'Arbeitsvertrag', branch: 3, level: 'l3' },
+        ]},
+        { id: 'vert_verw', label: 'Verweis', branch: 3, level: 'l3', children: [
+          { id: 'vert_v1', label: 'Abschluss & Wirkungen → Kapitel 17', branch: 3, level: 'l3' },
+        ]},
+      ]
+    },
+
+    // von Gesetzes wegen (now L2 child of entst)
+    { id: 'vgg', label: 'von Gesetzes wegen', branch: 1, level: 'l2',
+      children: [
+
+    // BRANCH 1 — Unerlaubte Handlung (LEFT child)
+    { id: 'uh', label: 'Unerlaubte Handlung', sub: 'Kap. 16.2', branch: 1, level: 'l2',
+      children: [
+        { id: 'uh_vh', label: 'Verschuldenshaftung', sub: 'Art. 41 Abs. 1 OR', branch: 1, level: 'l2', children: [
+          { id: 'uh_vh_def', label: 'Wer widerrechtlich Schaden zufügt, haftet', branch: 1, level: 'l3' },
+          { id: 'uh_vm', label: '4 Tatbestandsmerkmale', branch: 1, level: 'l2', children: [
+            { id: 'uh_vm1', label: '1. Schaden', branch: 1, level: 'l3', children: [
+              { id: 'uh_vm1a', label: 'Unfreiwillige Vermögensverminderung', branch: 1, level: 'l3' },
+              { id: 'uh_vm1b', label: 'Personenschaden (Körperverletzung/Tod)', branch: 1, level: 'l3' },
+              { id: 'uh_vm1c', label: 'Sachschaden (Beschädigung/Zerstörung)', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_vm2', label: '2. Widerrechtlichkeit', branch: 1, level: 'l3', children: [
+              { id: 'uh_vm2a', label: 'Verletzung eines absoluten Rechts', branch: 1, level: 'l3' },
+              { id: 'uh_vm2c', label: 'Kein Rechtfertigungsgrund vorhanden', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_vm3', label: '3. Adäquater Kausalzusammenhang', branch: 1, level: 'l3', children: [
+              { id: 'uh_vm3a', label: 'Handlung muss ursächlich für Schaden sein', branch: 1, level: 'l3' },
+              { id: 'uh_vm3b', label: 'Ungewöhnliche Folgen: keine Haftung', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_vm4', label: '4. Verschulden', branch: 1, level: 'l3', children: [
+              { id: 'uh_vm4a', label: 'Absicht: Schaden wird gewollt', branch: 1, level: 'l3' },
+              { id: 'uh_vm4b', label: 'Grobe Fahrlässigkeit: elementare Vorsichtsgebote missachtet', branch: 1, level: 'l3' },
+              { id: 'uh_vm4c', label: 'Leichte Fahrlässigkeit: geringe Abweichung von Sorgfalt', branch: 1, level: 'l3' },
+              { id: 'uh_vm4d', label: 'Kein Verschulden bei Urteilsunfähigkeit', branch: 1, level: 'l3' },
+            ]},
+          ]},
+          { id: 'uh_rf', label: 'Rechtsfolge: Schadenersatzpflicht', branch: 1, level: 'l3' },
+        ]},
+        { id: 'uh_kh', label: 'Kausalhaftung', sub: 'Haftung ohne Verschulden', branch: 1, level: 'l2', children: [
+          { id: 'uh_kh_def', label: 'Haftung aus Verantwortung für Sache/Person', branch: 1, level: 'l3' },
+          { id: 'uh_kh_vm', label: 'Voraussetzungen: Schaden + Widerrechtlichkeit + Kausalzusammenhang', branch: 1, level: 'l3' },
+          { id: 'uh_kh_art', label: 'Haftungsarten', branch: 1, level: 'l2', children: [
+            { id: 'uh_kh1', label: 'Geschäftsherrenhaftung (Art. 55 OR)', branch: 1, level: 'l3', children: [
+              { id: 'uh_kh1a', label: 'Haftung für Schaden durch Hilfspersonen', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_kh2', label: 'Tierhalterhaftung (Art. 56 OR)', branch: 1, level: 'l3', children: [
+              { id: 'uh_kh2a', label: 'Haftung für Schaden durch eigenes Tier', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_kh3', label: 'Werkeigentümerhaftung (Art. 58 OR)', branch: 1, level: 'l3', children: [
+              { id: 'uh_kh3a', label: 'Haftung für fehlerhafte Anlage/mangelhaften Unterhalt', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_kh4', label: 'Familienhaupthaftung (Art. 333 ZGB)', branch: 1, level: 'l3', children: [
+              { id: 'uh_kh4a', label: 'Haftung für aufsichtsbedürftige Hausgenossen', branch: 1, level: 'l3' },
+            ]},
+            { id: 'uh_kh5', label: 'Motorfahrzeughalterhaftung (Art. 58 SVG)', branch: 1, level: 'l3', children: [
+              { id: 'uh_kh5a', label: 'Haftung für Schäden durch Fahrzeugbetrieb', branch: 1, level: 'l3' },
+            ]},
+          ]},
+        ]},
+      ]
+    },
+
+    // BRANCH 2 — Ungerechtfertigte Bereicherung (LEFT child of vgg)
+    { id: 'ub', label: 'Ungerechtfertigte Bereicherung', sub: 'Kap. 16.3 · Art. 62 OR', branch: 2, level: 'l2',
+      children: [
+        { id: 'ub_def', label: 'Grundsatz', branch: 2, level: 'l2', children: [
+          { id: 'ub_def1', label: 'Bereicherung ohne Rechtsgrund = Rückerstattungspflicht', branch: 2, level: 'l3' },
+          { id: 'ub_def2', label: 'Vermögensverschiebung: Eine bereichert, andere entreichert', branch: 2, level: 'l3' },
+        ]},
+        { id: 'ub_tm', label: '3 Tatbestandsmerkmale', branch: 2, level: 'l2', children: [
+          { id: 'ub_tm1', label: '1. Bereicherung (Vermögensvorteil)', branch: 2, level: 'l3' },
+          { id: 'ub_tm2', label: '2. Entreicherung (Vermögensnachteil)', branch: 2, level: 'l3' },
+          { id: 'ub_tm3', label: '3. Ohne Rechtsgrund', branch: 2, level: 'l3' },
+        ]},
+        { id: 'ub_faelle', label: '3 Fälle (Art. 62 Abs. 2 OR)', branch: 2, level: 'l2', children: [
+          { id: 'ub_f1', label: 'a) Ohne gültigen Grund', branch: 2, level: 'l3', children: [
+            { id: 'ub_f1a', label: 'Bsp: Irrtümlich falsche Rechnung bezahlt', branch: 2, level: 'l3' },
+          ]},
+          { id: 'ub_f2', label: 'b) Aus nicht verwirklichtem Grund', branch: 2, level: 'l3', children: [
+            { id: 'ub_f2a', label: 'Bsp: Kaufvertrag kommt nicht zustande', branch: 2, level: 'l3' },
+            { id: 'ub_f2b', label: '→ Anzahlung kann zurückgefordert werden', branch: 2, level: 'l3' },
+          ]},
+          { id: 'ub_f3', label: 'c) Aus nachträglich weggefallenen Grund', branch: 2, level: 'l3', children: [
+            { id: 'ub_f3a', label: 'Bsp: Miethaus abbrennt → Mietzins zurückverlangen', branch: 2, level: 'l3' },
+          ]},
+        ]},
+        { id: 'ub_rf', label: 'Rechtsfolge: Rückerstattungspflicht', branch: 2, level: 'l2' },
+      ]
+    },
+
+      ] // end vgg children
+    }, // end vgg
+
+      ] // end entst children
+    }, // end entst
+
+  ]
+};
+
+// ─── NODE DESCRIPTIONS ───────────────────────────────────────────────────────
+const nodeInfo = {
+  'root':     { title: 'Obligation – Kapitel 16', text: 'Eine Obligation ist ein Rechtsverhältnis, bei dem eine Partei (Gläubiger) ein Recht auf eine Leistung hat und die andere (Schuldner) zur Leistung verpflichtet ist. Obligationen entstehen durch Vertrag, unerlaubte Handlung oder ungerechtfertigte Bereicherung.', question: 'Wie ist die Obligation entstanden – freiwillig oder von Gesetzes wegen?' },
+
+  'ob':       { title: 'Begriff & Grundlagen', text: 'Die Obligation ist das Kernstück des Schuldrechts: Sie verbindet Gläubiger und Schuldner durch gegenseitige Rechte und Pflichten.', question: 'Wer ist Gläubiger, wer ist Schuldner – und was ist die Leistungspflicht?' },
+  'ob_def':   { title: 'Definition der Obligation', text: 'Obligation = Rechtsverhältnis zwischen mindestens zwei Personen. Die eine hat das Recht auf Leistung (Forderung), die andere die Pflicht zur Leistung (Schuld).', question: '' },
+  'ob_def1':  { title: 'Rechtsverhältnis zwischen Personen', text: 'Die Obligation entsteht immer zwischen konkreten Personen – nicht zwischen Personen und Sachen.', question: '' },
+  'ob_def2':  { title: 'Gläubiger: Recht auf Leistung', text: 'Der Gläubiger hat eine Forderung – er kann die Leistung vom Schuldner verlangen.', question: '' },
+  'ob_def3':  { title: 'Schuldner: Verpflichtet zur Leistung', text: 'Der Schuldner hat eine Schuld – er muss die Leistung erbringen.', question: '' },
+  'ob_par':   { title: 'Parteien der Obligation', text: 'Jede Obligation hat genau zwei Seiten: eine leistungsberechtigte (Gläubiger) und eine leistungspflichtige (Schuldner).', question: '' },
+  'ob_gl':    { title: 'Gläubiger', text: 'Hat das Recht, die Leistung zu fordern. Seine Position heisst «Forderung».', question: '' },
+  'ob_gl1':   { title: 'Forderung des Gläubigers', text: 'Bsp: Verkäuferin hat Forderung auf den Kaufpreis. Sie kann ihn vom Käufer verlangen.', question: '' },
+  'ob_sc':    { title: 'Schuldner', text: 'Ist verpflichtet, die Leistung zu erbringen. Seine Position heisst «Schuld».', question: '' },
+  'ob_sc1':   { title: 'Schuld des Schuldners', text: 'Bsp: Käufer schuldet den Kaufpreis. Er ist Schuldner der Verkäuferin.', question: '' },
+  'ob_sv':    { title: 'Schuldverhältnis', text: 'Umfasst alle Rechtsbeziehungen zwischen Gläubiger und Schuldner. Ein Schuldverhältnis kann mehrere Obligationen enthalten.', question: 'Wie viele Obligationen entstehen aus diesem Vertrag?' },
+  'ob_sv1':   { title: 'Gesamtheit der Rechtsbeziehungen', text: 'Das Schuldverhältnis ist breiter als die einzelne Obligation – es umfasst alle wechselseitigen Pflichten.', question: '' },
+  'ob_sv2':   { title: 'Mehrere Obligationen möglich', text: 'Aus einem einzigen Vertrag können mehrere Obligationen entstehen.', question: '' },
+  'ob_sv3':   { title: 'Beispiel Kaufvertrag', text: 'Kaufvertrag → 2 Obligationen: (1) Käufer schuldet Kaufpreis. (2) Verkäufer schuldet die Ware.', question: '' },
+
+  'entst':    { title: 'Entstehung der Obligation', text: 'Obligationen können auf zwei grundlegend verschiedene Arten entstehen: mit dem Willen der Parteien (durch Vertrag) oder von Gesetzes wegen (durch unerlaubte Handlung oder ungerechtfertigte Bereicherung).', question: 'Ist die Obligation freiwillig eingegangen oder von Gesetzes wegen entstanden?' },
+
+  'vert':     { title: 'mit dem Willen der Parteien', text: 'Die häufigste Quelle von Obligationen: Beide Parteien einigen sich freiwillig auf eine Leistungspflicht. Grundlage ist die Vertragsfreiheit.', question: 'Haben beide Parteien freiwillig zugestimmt?' },
+  'vert_prinz':{ title: 'Vertragsfreiheit', text: 'Im Schweizer Recht gilt der Grundsatz der Vertragsfreiheit: Parteien können fast jeden Inhalt vereinbaren, solange es legal ist.', question: '' },
+  'vert_p1':  { title: 'Freiwillige Bindung', text: 'Im Gegensatz zur unerlaubten Handlung wählen beide Parteien bewusst, Pflichten einzugehen.', question: '' },
+  'vert_p2':  { title: 'Antrag + Annahme', text: 'Ein Vertrag kommt zustande, wenn ein Antrag gemacht und von der anderen Partei angenommen wird.', question: '' },
+  'vert_p3':  { title: 'Häufigste Quelle', text: 'Die grosse Mehrheit aller Obligationen entsteht durch Verträge – im Alltag wie im Geschäftsverkehr.', question: '' },
+  'vert_arten':{ title: 'Wichtige Vertragstypen', text: 'Das OR kennt zahlreiche benannte Vertragstypen, die jeweils eigene Regeln haben.', question: '' },
+  'vert_kv':  { title: 'Kaufvertrag', text: 'Verkäufer übergibt Sache und überträgt Eigentum; Käufer zahlt den Preis. Geregelt in OR Art. 184 ff.', question: '' },
+  'vert_mv':  { title: 'Mietvertrag', text: 'Vermieter überlässt Sache zum Gebrauch; Mieter zahlt Mietzins. Geregelt in OR Art. 253 ff.', question: '' },
+  'vert_av':  { title: 'Arbeitsvertrag', text: 'Arbeitnehmer leistet Arbeit; Arbeitgeber zahlt Lohn. Geregelt in OR Art. 319 ff.', question: '' },
+  'vert_verw':{ title: 'Verweis auf Kapitel 17', text: 'Die detaillierten Regeln zu Abschluss und Wirkungen von Verträgen werden in Kapitel 17 behandelt.', question: '' },
+  'vert_v1':  { title: 'Kapitel 17 – Allgemeine Vertragslehre', text: 'Kapitel 17 behandelt: Abschluss, Gültigkeit, Erfüllung, Verjährung und Mängel von Verträgen.', question: '' },
+
+  'vgg':      { title: 'Von Gesetzes wegen', text: 'Obligationen entstehen nicht nur durch Verträge, sondern auch von Gesetzes wegen – d.h. ohne den Willen der Betroffenen. Die zwei Hauptquellen: unerlaubte Handlung und ungerechtfertigte Bereicherung.', question: 'Liegt eine unerlaubte Handlung oder eine ungerechtfertigte Bereicherung vor?' },
+
+  'uh':       { title: 'Obligation aus unerlaubter Handlung', text: 'Wer widerrechtlich einen Schaden zufügt, wird schadenersatzpflichtig – auch ohne Vertrag. Grundtatbestand: Art. 41 Abs. 1 OR.', question: 'Trifft den Schädiger ein Verschulden – oder haftet er aus Kausalhaftung?' },
+  'uh_vh':    { title: 'Verschuldenshaftung (Art. 41 OR)', text: 'Haupttatbestand der ausservertraglichen Haftung. Vier Voraussetzungen müssen kumulativ erfüllt sein.', question: 'Sind alle 4 Tatbestandsmerkmale erfüllt?' },
+  'uh_vh_def':{ title: 'Grundsatz', text: 'Wer einem andern widerrechtlich Schaden zufügt, sei es mit Absicht, sei es aus Fahrlässigkeit, wird ihm zum Ersatze verpflichtet. (Art. 41 Abs. 1 OR)', question: '' },
+  'uh_vm':    { title: '4 Tatbestandsmerkmale', text: 'Alle vier Merkmale müssen mit Ja beantwortet werden können: Schaden, Widerrechtlichkeit, Kausalzusammenhang, Verschulden.', question: '' },
+  'uh_vm1':   { title: '1. Schaden', text: 'Unfreiwillige Vermögensverminderung. Zwei Arten: Personenschaden und Sachschaden.', question: 'Ist ein messbarer Vermögensnachteil eingetreten?' },
+  'uh_vm1a':  { title: 'Unfreiwillige Vermögensverminderung', text: 'Der Schaden muss ungewollt sein – bewusst eingegangene Risiken können ausgeschlossen sein.', question: '' },
+  'uh_vm1b':  { title: 'Personenschaden', text: 'Entsteht durch Körperverletzung oder Tötung. Folgen: Heilungskosten, Verdienstausfall.', question: '' },
+  'uh_vm1c':  { title: 'Sachschaden', text: 'Entsteht durch Beschädigung oder Zerstörung einer Sache. Folgen: Reparatur- oder Wiederbeschaffungskosten.', question: '' },
+  'uh_vm2':   { title: '2. Widerrechtlichkeit', text: 'Die Handlung muss ein absolutes Recht verletzen und es darf kein Rechtfertigungsgrund vorliegen.', question: 'Wurde ein absolutes Recht verletzt?' },
+  'uh_vm2a':  { title: 'Verletzung eines absoluten Rechts', text: 'Absolute Rechte gelten gegenüber jedermann – jeder muss sie respektieren. Beispiele: Eigentumsrecht, Persönlichkeitsrechte (Gesundheit, Ehre, Privatsphäre). Bsp: Sprayer beschädigt Hauswand → Verletzung des Eigentumsrechts.', question: '' },
+  'uh_vm2c':  { title: 'Kein Rechtfertigungsgrund', text: 'Rechtfertigungsgründe (z.B. Notwehr, Einwilligung) können die Widerrechtlichkeit aufheben.', question: '' },
+  'uh_vm3':   { title: '3. Adäquater Kausalzusammenhang', text: 'Die Handlung muss ursächlich für den Schaden sein – aber nur für vorhersehbare, typische Folgen.', question: 'War der Schaden nach dem gewöhnlichen Lauf der Dinge zu erwarten?' },
+  'uh_vm3a':  { title: 'Handlung muss Ursache sein', text: 'Ohne die widerrechtliche Handlung wäre der Schaden nicht eingetreten.', question: '' },
+  'uh_vm3b':  { title: 'Ungewöhnliche Folgen: keine Haftung', text: 'Bsp: Graffiti → Herzinfarkt des Eigentümers: kein adäquater Kausalzusammenhang, da nicht vorhersehbar.', question: '' },
+  'uh_vm4':   { title: '4. Verschulden', text: 'Dem Schädiger muss sein Verhalten vorgeworfen werden können – Absicht oder Fahrlässigkeit.', question: 'Hat der Schädiger absichtlich oder fahrlässig gehandelt?' },
+  'uh_vm4a':  { title: 'Absicht', text: 'Wer einen Schaden bewusst will und herbeiführt, handelt mit Absicht. Schwerste Verschuldensform.', question: '' },
+  'uh_vm4b':  { title: 'Grobe Fahrlässigkeit', text: 'Wer elementarste Vorsichtsgebote missachtet, handelt grobfahrlässig. Bsp: SMS schreiben am Steuer.', question: '' },
+  'uh_vm4c':  { title: 'Leichte Fahrlässigkeit', text: 'Geringfügige Abweichung von gebotener Sorgfalt. Massstab: durchschnittlich sorgfältige Person.', question: '' },
+  'uh_vm4d':  { title: 'Kein Verschulden bei Urteilsunfähigkeit', text: 'Personen, die urteilsunfähig sind (z.B. Kinder, schwer Geisteskranke), trifft kein Verschulden.', question: '' },
+  'uh_rf':    { title: 'Rechtsfolge: Schadenersatzpflicht', text: 'Sind alle 4 Voraussetzungen erfüllt, muss der Schädiger den entstandenen Schaden vollständig ersetzen.', question: '' },
+  'uh_kh':    { title: 'Kausalhaftung', text: 'In besonderen Fällen haftet jemand ohne eigenes Verschulden – allein weil er für eine Sache oder Person verantwortlich ist.', question: 'Ist eine besondere Verantwortungsstellung gegeben?' },
+  'uh_kh_def':{ title: 'Haftung ohne Verschulden', text: 'Das Gesetz knüpft die Haftung an die Verantwortung für eine Sache oder Person – nicht an persönliches Fehlverhalten.', question: '' },
+  'uh_kh_vm': { title: 'Voraussetzungen', text: 'Auch bei Kausalhaftung braucht es: Schaden, Widerrechtlichkeit und adäquaten Kausalzusammenhang. Verschulden ist nicht erforderlich.', question: '' },
+  'uh_kh_art':{ title: 'Haftungsarten im Überblick', text: 'Das Gesetz kennt mehrere spezifische Kausalhaftungen für bestimmte Verantwortungsstellungen.', question: '' },
+  'uh_kh1':   { title: 'Geschäftsherrenhaftung (Art. 55 OR)', text: 'Wer andere mit Aufgaben betraut, haftet für deren Schäden bei der Auftragserfüllung.', question: '' },
+  'uh_kh1a':  { title: 'Haftung für Hilfspersonen', text: 'Bsp: Gärtner lässt Lehrling Baum fällen → Schaden am Nachbarauto → Gärtner haftet.', question: '' },
+  'uh_kh2':   { title: 'Tierhalterhaftung (Art. 56 OR)', text: 'Wer ein Tier hält, haftet für jeden vom Tier angerichteten Schaden – unabhängig von Verschulden.', question: '' },
+  'uh_kh2a':  { title: 'Haftung für Tierschäden', text: 'Bsp: Hund beisst Kind → Halterin muss Arztkosten übernehmen.', question: '' },
+  'uh_kh3':   { title: 'Werkeigentümerhaftung (Art. 58 OR)', text: 'Eigentümer von Gebäuden haftet für Schäden durch fehlerhafte Anlage oder mangelhaften Unterhalt.', question: '' },
+  'uh_kh3a':  { title: 'Haftung für Werkmängel', text: 'Bsp: Vereisung nicht beseitigt → Besucher stürzt → Eigentümer haftet für Heilungskosten.', question: '' },
+  'uh_kh4':   { title: 'Familienhaupthaftung (Art. 333 ZGB)', text: 'Eltern haften für Schäden durch aufsichtsbedürftige Hausgenossen (Kinder, Geisteskranke).', question: '' },
+  'uh_kh4a':  { title: 'Haftung für aufsichtsbedürftige Personen', text: 'Bsp: Kind zündet Baumhütte an → Mutter haftet für den Schaden.', question: '' },
+  'uh_kh5':   { title: 'Motorfahrzeughalterhaftung (Art. 58 SVG)', text: 'Wer ein Motorfahrzeug hält, haftet für alle Schäden durch den Betrieb des Fahrzeuges.', question: '' },
+  'uh_kh5a':  { title: 'Haftung für Fahrzeugbetrieb', text: 'Bsp: Kind rennt vor Auto → Fahrerin haftet für Heilungskosten, obwohl sie nicht fahrlässig handelte.', question: '' },
+
+  'ub':       { title: 'Ungerechtfertigte Bereicherung (Art. 62 OR)', text: 'Wer sich ohne Rechtsgrund aus dem Vermögen eines anderen bereichert hat, muss das Erlangte zurückerstatten.', question: 'Fehlt ein gültiger Rechtsgrund für die Vermögensverschiebung?' },
+  'ub_def':   { title: 'Grundsatz', text: 'Jede Vermögensverschiebung braucht einen Rechtsgrund. Fehlt er, muss die Bereicherung zurückgegeben werden.', question: '' },
+  'ub_def1':  { title: 'Rückerstattungspflicht', text: 'Bereicherung ohne Rechtsgrund → Pflicht zur Rückerstattung. Gesetzlich verankert in Art. 62 Abs. 1 OR.', question: '' },
+  'ub_def2':  { title: 'Vermögensverschiebung', text: 'Eine Person wird bereichert (erhält Vermögensvorteil), eine andere entreichert (erleidet Nachteil).', question: '' },
+  'ub_tm':    { title: '3 Tatbestandsmerkmale', text: 'Für eine ungerechtfertigte Bereicherung müssen drei Elemente vorliegen.', question: '' },
+  'ub_tm1':   { title: '1. Bereicherung', text: 'Die eine Person erhält einen Vermögensvorteil – z.B. eine Geldzahlung oder eine Sache.', question: '' },
+  'ub_tm2':   { title: '2. Entreicherung', text: 'Die andere Person erleidet einen Vermögensnachteil – ihr Vermögen verringert sich.', question: '' },
+  'ub_tm3':   { title: '3. Ohne Rechtsgrund', text: 'Es gibt keine vertragliche oder gesetzliche Grundlage für die Vermögensverschiebung.', question: '' },
+  'ub_faelle':{ title: '3 Fälle ohne Rechtsgrund (Art. 62 Abs. 2)', text: 'Das Gesetz nennt drei konkrete Situationen, in denen eine Bereicherung ungerechtfertigt ist.', question: 'Warum fehlt der Rechtsgrund – ab initio, nicht verwirklicht oder weggefallen?' },
+  'ub_f1':    { title: 'a) Ohne gültigen Grund', text: 'Von Anfang an kein Rechtsgrund vorhanden. Die Zahlung war von Beginn weg grundlos.', question: '' },
+  'ub_f1a':   { title: 'Beispiel: Falsche Rechnung bezahlt', text: 'Versehentliche Zahlung einer fremden Rechnung → Empfänger ist ungerechtfertigt bereichert → Rückforderungsrecht.', question: '' },
+  'ub_f2':    { title: 'b) Nicht verwirklichter Grund', text: 'Ein Rechtsgrund war erwartet, ist aber nicht zustande gekommen.', question: '' },
+  'ub_f2a':   { title: 'Beispiel: Kaufvertrag scheitert', text: 'Anzahlung für Grundstückskauf – Verkäufer will doch nicht verkaufen → Vertrag kommt nicht zustande.', question: '' },
+  'ub_f2b':   { title: 'Rechtsfolge: Rückforderung', text: 'Da der Grund (Kaufvertrag) nicht verwirklicht wurde, kann die Anzahlung zurückgefordert werden.', question: '' },
+  'ub_f3':    { title: 'c) Nachträglich weggefallener Grund', text: 'Ein ursprünglich gültiger Rechtsgrund fällt später weg.', question: '' },
+  'ub_f3a':   { title: 'Beispiel: Miethaus abbrennt', text: 'Mietzins im Voraus bezahlt – Haus brennt ab und ist unbewohnbar → Grund weggefallen → Mietzins rückforderbar.', question: '' },
+  'ub_rf':    { title: 'Rechtsfolge: Rückerstattungspflicht', text: 'Der Bereicherte muss das Erlangte zurückgeben. Kann er es nicht mehr herausgeben, schuldet er Ersatz.', question: '' },
+};
+
+// ─── LAYOUT ──────────────────────────────────────────────────────────────────
+const CX = 2400, CY = 1800;
+const positions = {};
+const LEAF_GAP = 34;
+const X_GAP_L2 = 260;
+const X_GAP_L3 = 240;
+
+function countLeaves(node) {
+  if (!node.children || node.children.length === 0) return 1;
+  return node.children.reduce((s, c) => s + countLeaves(c), 0);
+}
+
+function layoutTree() {
+  positions['root'] = { x: CX, y: CY, side: 'root' };
+
+  const l1Positions = {
+    'ob':    { x: CX + 750, y: CY - 480 },
+    'entst': { x: CX + 750, y: CY + 300 },
+    'vgg':   { x: CX - 750, y: CY + 100 },
+  };
+
+  function layoutChildren(node, nodePos, side, xOff) {
+    if (!node.children || node.children.length === 0) return;
+    const totalLeaves = countLeaves(node);
+    const totalHeight = totalLeaves * LEAF_GAP;
+    let cursor = nodePos.y - totalHeight / 2;
+    node.children.forEach(child => {
+      const childLeaves = countLeaves(child);
+      const childHeight = childLeaves * LEAF_GAP;
+      const childY = cursor + childHeight / 2;
+      cursor += childHeight;
+      positions[child.id] = { x: nodePos.x + xOff, y: childY, side };
+      const nextXOff = side === 'left' ? -X_GAP_L3 : X_GAP_L3;
+      layoutChildren(child, positions[child.id], side, nextXOff);
+    });
+  }
+
+  data.children.forEach(l1Node => {
+    const pos = l1Positions[l1Node.id] || { x: CX, y: CY };
+    positions[l1Node.id] = pos;
+    const side = pos.x < CX ? 'left' : 'right';
+    positions[l1Node.id].side = side;
+    const xOff = side === 'left' ? -X_GAP_L2 : X_GAP_L2;
+    layoutChildren(l1Node, pos, side, xOff);
+  });
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+let transform = { x: 0, y: 0, scale: 0.35 };
+
+function renderAll() {
+  layoutTree();
+  renderNodes();
+  requestAnimationFrame(() => requestAnimationFrame(() => renderLines()));
+}
+
+const nodesDiv = document.getElementById('nodes');
+const svg = document.getElementById('lines');
+
+function renderNodes() {
+  nodesDiv.innerHTML = '';
+  function createNode(node) {
+    const pos = positions[node.id];
+    if (!pos) return;
+    const side = pos.side || 'left';
+    const el = document.createElement('div');
+    el.className = `node ${node.level}${node.branch !== undefined ? ' branch-' + node.branch : ''}`;
+    el.id = 'n-' + node.id;
+    el.style.left = pos.x + 'px';
+    el.style.top = pos.y + 'px';
+    if (node.level === 'root') {
+      el.style.transform = 'translate(-50%, -50%)';
+    } else if (side === 'left') {
+      el.style.transform = 'translate(-100%, -50%)';
+    } else {
+      el.style.transform = 'translate(0%, -50%)';
+    }
+    let label = node.label;
+    if (node.sub) label += ` <span style="opacity:0.55;font-size:0.85em">${node.sub}</span>`;
+    const inner = document.createElement('div');
+    inner.className = 'node-inner';
+    inner.innerHTML = label;
+    inner.style.textAlign = (node.level === 'root') ? 'center' : side === 'left' ? 'right' : 'left';
+    el.appendChild(inner);
+    nodesDiv.appendChild(el);
+    if (node.children) node.children.forEach(createNode);
+  }
+  createNode(data);
+}
+
+function renderLines() {
+  svg.innerHTML = '';
+  const colors = ['#7c3aed', '#2563eb', '#059669', '#db2777'];
+
+  function getBoxEdge(nodeId, goingLeft) {
+    const pos = positions[nodeId];
+    if (!pos) return { x: 0, y: 0 };
+    const el = document.getElementById('n-' + nodeId);
+    if (!el) return { x: pos.x, y: pos.y };
+    const inner = el.querySelector('.node-inner') || el;
+    const w = inner.offsetWidth;
+    const side = pos.side || 'left';
+    let ex;
+    if (side === 'root') {
+      ex = goingLeft ? pos.x - w / 2 : pos.x + w / 2;
+    } else if (side === 'left') {
+      ex = goingLeft ? pos.x - w : pos.x;
+    } else {
+      ex = goingLeft ? pos.x : pos.x + w;
+    }
+    return { x: ex, y: pos.y };
+  }
+
+  function drawTree(node) {
+    if (!node.children) return;
+    node.children.forEach(child => {
+      const fPos = positions[node.id];
+      const tPos = positions[child.id];
+      if (!fPos || !tPos) return;
+      const color = child.branch !== undefined ? colors[child.branch % colors.length] : '#aaa';
+      const opacity = child.level === 'l2' ? '0.45' : '0.25';
+      const weight = child.level === 'l2' ? '1.4' : '0.9';
+      const childSide = tPos.side || 'left';
+      const goingLeft = childSide === 'left';
+      const from = getBoxEdge(node.id, goingLeft);
+      const to   = getBoxEdge(child.id, !goingLeft);
+      const mx = (from.x + to.x) / 2;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const d = `M ${from.x} ${from.y} C ${mx} ${from.y}, ${mx} ${to.y}, ${to.x} ${to.y}`;
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', color);
+      path.setAttribute('stroke-width', weight);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', opacity);
+      svg.appendChild(path);
+      drawTree(child);
+    });
+  }
+  drawTree(data);
+}
+
+function applyTransform() {
+  const t = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+  nodesDiv.style.transform = t;
+  svg.style.transform = t;
+  svg.style.transformOrigin = '0 0';
+  nodesDiv.style.transformOrigin = '0 0';
+}
+
+window.addEventListener('load', () => {
+  renderAll();
+  transform.x = window.innerWidth / 2 - CX * transform.scale;
+  transform.y = window.innerHeight / 2 - CY * transform.scale;
+  applyTransform();
+  document.fonts.ready.then(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => renderLines()));
+  });
+});
+
+// ─── INTERACTION ─────────────────────────────────────────────────────────────
+let isDragging = false, lastX, lastY;
+
+document.body.addEventListener('mousedown', e => {
+  if (e.target.closest('.node') || e.target.closest('#info-panel') || e.target.closest('#controls')) return;
+  isDragging = true;
+  lastX = e.clientX; lastY = e.clientY;
+  document.body.classList.add('dragging');
+});
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  transform.x += e.clientX - lastX;
+  transform.y += e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  applyTransform();
+});
+document.addEventListener('mouseup', () => {
+  isDragging = false;
+  document.body.classList.remove('dragging');
+});
+
+document.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey) {
+    const factor = 1 - e.deltaY * 0.008;
+    const clampedFactor = Math.max(0.5, Math.min(2.0, factor));
+    const mx = e.clientX, my = e.clientY;
+    const newScale = Math.min(2.5, Math.max(0.1, transform.scale * clampedFactor));
+    const scaleChange = newScale / transform.scale;
+    transform.x = mx - (mx - transform.x) * scaleChange;
+    transform.y = my - (my - transform.y) * scaleChange;
+    transform.scale = newScale;
+  } else {
+    const multiplier = e.deltaMode === 0 ? 1 : e.deltaMode === 1 ? 20 : 300;
+    transform.x -= e.deltaX * multiplier;
+    transform.y -= e.deltaY * multiplier;
+  }
+  applyTransform();
+}, { passive: false });
+
+let lastTouchDist = null, lastTouchMidX = 0, lastTouchMidY = 0;
+document.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { isDragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; }
+  else if (e.touches.length === 2) {
+    isDragging = false;
+    lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    lastTouchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    lastTouchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  }
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    transform.x += e.touches[0].clientX - lastX; transform.y += e.touches[0].clientY - lastY;
+    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; applyTransform();
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    if (lastTouchDist) {
+      const factor = dist / lastTouchDist;
+      const newScale = Math.min(2.5, Math.max(0.1, transform.scale * factor));
+      const scaleChange = newScale / transform.scale;
+      transform.x = midX - (midX - transform.x) * scaleChange + (midX - lastTouchMidX);
+      transform.y = midY - (midY - transform.y) * scaleChange + (midY - lastTouchMidY);
+      transform.scale = newScale;
+    }
+    lastTouchDist = dist; lastTouchMidX = midX; lastTouchMidY = midY; applyTransform();
+  }
+}, { passive: false });
+document.addEventListener('touchend', () => { isDragging = false; lastTouchDist = null; });
+
+document.getElementById('zoomIn').addEventListener('click', () => { transform.scale = Math.min(2, transform.scale * 1.2); applyTransform(); });
+document.getElementById('zoomOut').addEventListener('click', () => { transform.scale = Math.max(0.15, transform.scale * 0.8); applyTransform(); });
+document.getElementById('zoomReset').addEventListener('click', () => {
+  transform.scale = 0.35;
+  transform.x = window.innerWidth / 2 - CX * transform.scale;
+  transform.y = window.innerHeight / 2 - CY * transform.scale;
+  applyTransform();
+});
+
+// ─── INFO PANEL ──────────────────────────────────────────────────────────────
+const branchColors = ['#7c3aed', '#2563eb', '#059669', '#db2777'];
+const panel = document.getElementById('info-panel');
+const accent = document.getElementById('info-accent');
+const infoTitle = document.getElementById('info-title');
+const infoText = document.getElementById('info-text');
+const infoQuestion = document.getElementById('info-question');
+
+let clickMoved = false, mouseDownX = 0, mouseDownY = 0;
+document.addEventListener('mousedown', e => { clickMoved = false; mouseDownX = e.clientX; mouseDownY = e.clientY; });
+document.addEventListener('mousemove', e => {
+  if (Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) > 5) clickMoved = true;
+});
+
+nodesDiv.addEventListener('click', e => {
+  if (clickMoved) return;
+  const nodeEl = e.target.closest('.node');
+  if (!nodeEl) return;
+  const id = nodeEl.id.replace('n-', '');
+  const info = nodeInfo[id];
+  if (!info) return;
+  const branchClass = [...nodeEl.classList].find(c => c.startsWith('branch-'));
+  const branchIdx = branchClass ? parseInt(branchClass.split('-')[1]) : -1;
+  const color = branchIdx >= 0 ? branchColors[branchIdx] : '#a78bfa';
+  accent.style.background = color;
+  infoTitle.textContent = info.title;
+  infoTitle.style.color = color;
+  infoText.textContent = info.text;
+  infoQuestion.textContent = info.question ? '💡 ' + info.question : '';
+  infoQuestion.style.display = info.question ? 'block' : 'none';
+  panel.classList.add('visible');
+  e.stopPropagation();
+});
+
+document.getElementById('info-close').addEventListener('click', () => panel.classList.remove('visible'));
+document.getElementById('canvas-wrap').addEventListener('click', e => {
+  if (!e.target.closest('.node') && !clickMoved) panel.classList.remove('visible');
+});
+</script>
+</body>
+</html>
