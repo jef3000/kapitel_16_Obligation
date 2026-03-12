@@ -654,7 +654,8 @@ window.addEventListener('load', () => {
 let isDragging = false, lastX, lastY;
 
 document.body.addEventListener('mousedown', e => {
-  if (e.target.closest('.node') || e.target.closest('#info-panel') || e.target.closest('#controls')) return;
+  if (e.button !== 2) return; // right mouse button only
+  if (e.target.closest('#info-panel') || e.target.closest('#controls')) return;
   isDragging = true;
   lastX = e.clientX; lastY = e.clientY;
   document.body.classList.add('dragging');
@@ -666,14 +667,21 @@ document.addEventListener('mousemove', e => {
   lastX = e.clientX; lastY = e.clientY;
   applyTransform();
 });
-document.addEventListener('mouseup', () => {
+document.addEventListener('mouseup', e => {
+  if (e.button !== 2) return;
   isDragging = false;
   document.body.classList.remove('dragging');
 });
+document.addEventListener('contextmenu', e => e.preventDefault());
 
 document.addEventListener('wheel', e => {
   e.preventDefault();
+  // ctrlKey = pinch gesture on trackpad → zoom
+  // deltaMode 0 + no ctrlKey: could be trackpad scroll or mouse wheel
+  // Distinguish mouse wheel (large discrete deltaY, no deltaX) from trackpad (small continuous, often has deltaX)
+  const isTrackpadScroll = !e.ctrlKey && (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) < 50);
   if (e.ctrlKey) {
+    // Trackpad pinch → zoom
     const factor = 1 - e.deltaY * 0.008;
     const clampedFactor = Math.max(0.5, Math.min(2.0, factor));
     const mx = e.clientX, my = e.clientY;
@@ -682,10 +690,20 @@ document.addEventListener('wheel', e => {
     transform.x = mx - (mx - transform.x) * scaleChange;
     transform.y = my - (my - transform.y) * scaleChange;
     transform.scale = newScale;
-  } else {
+  } else if (isTrackpadScroll) {
+    // Trackpad two-finger scroll → pan
     const multiplier = e.deltaMode === 0 ? 1 : e.deltaMode === 1 ? 20 : 300;
     transform.x -= e.deltaX * multiplier;
     transform.y -= e.deltaY * multiplier;
+  } else {
+    // Mouse wheel → zoom toward cursor
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const mx = e.clientX, my = e.clientY;
+    const newScale = Math.min(2.5, Math.max(0.1, transform.scale * factor));
+    const scaleChange = newScale / transform.scale;
+    transform.x = mx - (mx - transform.x) * scaleChange;
+    transform.y = my - (my - transform.y) * scaleChange;
+    transform.scale = newScale;
   }
   applyTransform();
 }, { passive: false });
